@@ -396,7 +396,6 @@
       text-align: right;
     }
 
-    /* Cards de resumo */
     .summary-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -429,15 +428,6 @@
       font-size: 1.1rem;
       font-weight: 700;
       color: #022c22;
-    }
-
-    .summary-pill {
-      font-size: 0.7rem;
-      margin-left: 4px;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: #ecfdf5;
-      color: #15803d;
     }
   </style>
 </head>
@@ -557,7 +547,7 @@
       </div>
     </form>
 
-    <!-- Barra de busca e info -->
+    <!-- Barra de busca, filtros e export -->
     <div class="toolbar">
       <div>
         <span class="muted">
@@ -587,6 +577,11 @@
             placeholder="Código, nome, responsável, área, matrícula ou defeito..."
           />
         </div>
+        <div style="margin-top: 4px;">
+          <button type="button" class="btn btn-small btn-secondary" id="export-csv">
+            Exportar CSV
+          </button>
+        </div>
       </div>
     </div>
 
@@ -603,6 +598,7 @@
             <th>Responsável</th>
             <th>Matrícula</th>
             <th>Área</th>
+            <th>Obs. Empr.</th>
             <th>Retirada em</th>
             <th>Prev. Devolução</th>
             <th>Local</th>
@@ -622,7 +618,6 @@
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      // Mantém compatibilidade com o que você já usou
       const STORAGE_KEY = "controleEquipamentosPorPessoa_heineken_defeito";
       const LEGACY_KEYS = ["controleEquipamentosPorPessoa_heineken"];
 
@@ -630,6 +625,7 @@
       const tbody = document.getElementById("inventory-body");
       const filterInput = document.getElementById("filter-input");
       const clearFormBtn = document.getElementById("clear-form");
+      const exportCsvBtn = document.getElementById("export-csv");
 
       const sumTotal = document.getElementById("sum-total");
       const sumDisp = document.getElementById("sum-disponivel");
@@ -641,8 +637,30 @@
 
       let inventory = [];
 
+      function adicionarHistorico(item, acao, detalhes) {
+        if (!Array.isArray(item.historico)) {
+          item.historico = [];
+        }
+        item.historico.push({
+          dataHora: new Date().toLocaleString("pt-BR"),
+          acao: acao,
+          detalhes: detalhes || ""
+        });
+        if (item.historico.length > 50) {
+          item.historico = item.historico.slice(-50);
+        }
+      }
+
       function normalizeInventory() {
         inventory = (inventory || []).map((item) => {
+          const historicoNormalizado = Array.isArray(item.historico)
+            ? item.historico.map((h) => ({
+                dataHora: h.dataHora || "",
+                acao: h.acao || "",
+                detalhes: h.detalhes || ""
+              }))
+            : [];
+
           const defaults = {
             codigo: "",
             nome: "",
@@ -654,12 +672,15 @@
             responsavel: "",
             matriculaColab: "",
             areaColab: "",
+            obsEmprestimo: "",
             dataRetirada: "",
             dataDevolucaoPrevista: "",
             descricaoDefeito: "",
-            dataDefeito: ""
+            dataDefeito: "",
+            acaoCorretiva: "",
+            historico: historicoNormalizado
           };
-          return { ...defaults, ...item };
+          return { ...defaults, ...item, historico: historicoNormalizado };
         });
       }
 
@@ -675,14 +696,12 @@
           }
         }
 
-        // tentar chaves antigas se a nova estiver vazia
         for (const legacyKey of LEGACY_KEYS) {
           const legacyData = localStorage.getItem(legacyKey);
           if (legacyData) {
             try {
               inventory = JSON.parse(legacyData) || [];
               normalizeInventory();
-              // salva já no novo formato/chave
               saveInventory();
               return;
             } catch (e) {
@@ -737,7 +756,9 @@
             " " +
             (item.matriculaColab || "") +
             " " +
-            (item.descricaoDefeito || "");
+            (item.descricaoDefeito || "") +
+            " " +
+            (item.obsEmprestimo || "");
 
           if (filter && !textoBusca.toLowerCase().includes(filter)) {
             return;
@@ -772,6 +793,33 @@
             statusLabel = '<span class="chip chip-available">Disponível</span>';
           }
 
+          const tooltipLines = [];
+          if (item.observacoes) {
+            tooltipLines.push("Obs. equipamento: " + item.observacoes);
+          }
+          if (item.descricaoDefeito) {
+            let t = "Último defeito: " + item.descricaoDefeito;
+            if (item.dataDefeito) t += " (" + item.dataDefeito + ")";
+            tooltipLines.push(t);
+          }
+          if (item.acaoCorretiva) {
+            tooltipLines.push("Ação corretiva: " + item.acaoCorretiva);
+          }
+          if (item.obsEmprestimo) {
+            tooltipLines.push("Obs. empréstimo: " + item.obsEmprestimo);
+          }
+          if (Array.isArray(item.historico) && item.historico.length > 0) {
+            const last = item.historico[item.historico.length - 1];
+            tooltipLines.push(
+              "Último evento: [" +
+                (last.dataHora || "") +
+                "] " +
+                (last.acao || "")
+            );
+          }
+          let tooltipText = tooltipLines.join("\n");
+          tooltipText = tooltipText.replace(/"/g, '&quot;');
+
           let actionsHtml = "";
 
           if (!isBorrowed && !isDefect) {
@@ -784,18 +832,21 @@
             actionsHtml += `<button class="btn btn-small btn-liberar-defeito liberar-defeito" data-codigo="${item.codigo}">Liberar defeito</button>`;
           }
 
+          actionsHtml += ` <button class="btn btn-small duplicar" data-codigo="${item.codigo}">Duplicar</button>`;
           actionsHtml += ` <button class="btn btn-small editar" data-codigo="${item.codigo}">Editar</button>`;
           actionsHtml += ` <button class="btn btn-small excluir" data-codigo="${item.codigo}">Excluir</button>`;
+          actionsHtml += ` <button class="btn btn-small historico" data-codigo="${item.codigo}">Histórico</button>`;
 
           tr.innerHTML = `
             <td>${item.codigo}</td>
-            <td>${item.nome}</td>
+            <td title="${tooltipText}">${item.nome}</td>
             <td>${item.categoria || ""}</td>
             <td>${item.numeroSerie || ""}</td>
             <td>${statusLabel}</td>
             <td>${item.responsavel || "-"}</td>
             <td>${item.matriculaColab || "-"}</td>
             <td>${item.areaColab || "-"}</td>
+            <td>${item.obsEmprestimo || "-"}</td>
             <td>${item.dataRetirada || "-"}</td>
             <td>${item.dataDevolucaoPrevista || "-"}</td>
             <td>${item.local || ""}</td>
@@ -829,7 +880,7 @@
           categoria,
           numeroSerie,
           local,
-          observacoes,
+          observacoes
         };
       }
 
@@ -851,6 +902,21 @@
         document.getElementById("observacoes").value =
           item.observacoes || "";
 
+        document.getElementById("codigo").focus();
+      }
+
+      function duplicarDispositivo(codigo) {
+        const item = inventory.find((i) => i.codigo === codigo);
+        if (!item) return;
+
+        document.getElementById("codigo").value = "";
+        document.getElementById("nome").value = item.nome || "";
+        document.getElementById("categoria").value = item.categoria || "";
+        document.getElementById("numero-serie").value =
+          item.numeroSerie || "";
+        document.getElementById("local").value = item.local || "";
+        document.getElementById("observacoes").value =
+          item.observacoes || "";
         document.getElementById("codigo").focus();
       }
 
@@ -893,6 +959,10 @@
           prompt(
             "Data prevista para devolução (opcional, ex.: 20/12/2025):"
           ) || "";
+        const obsEmp =
+          prompt(
+            "Observação do empréstimo (opcional, ex.: uso no HEILO, sem carregador, etc.):"
+          ) || "";
 
         item.status = "emprestado";
         item.responsavel = responsavel.trim();
@@ -900,6 +970,17 @@
         item.areaColab = area.trim();
         item.dataRetirada = new Date().toLocaleString("pt-BR");
         item.dataDevolucaoPrevista = dataPrevista.trim();
+        item.obsEmprestimo = obsEmp.trim();
+
+        adicionarHistorico(
+          item,
+          "Empréstimo",
+          "Emprestado para " +
+            item.responsavel +
+            (item.areaColab ? " (" + item.areaColab + ")" : "") +
+            (item.matriculaColab ? " - Matrícula " + item.matriculaColab : "") +
+            (item.obsEmprestimo ? " | Obs: " + item.obsEmprestimo : "")
+        );
 
         saveInventory();
         renderTable();
@@ -919,12 +1000,24 @@
         );
         if (!confirmar) return;
 
+        const resp = item.responsavel || "";
+        const obsEmp = item.obsEmprestimo || "";
+
+        adicionarHistorico(
+          item,
+          "Devolução",
+          "Devolvido por " +
+            (resp || "colaborador") +
+            (obsEmp ? " | Obs do empréstimo: " + obsEmp : "")
+        );
+
         item.status = "disponivel";
         item.responsavel = "";
         item.matriculaColab = "";
         item.areaColab = "";
         item.dataRetirada = "";
         item.dataDevolucaoPrevista = "";
+        item.obsEmprestimo = "";
 
         saveInventory();
         renderTable();
@@ -948,6 +1041,14 @@
         item.dataDefeito =
           dataDefeito.trim() || new Date().toLocaleString("pt-BR");
 
+        adicionarHistorico(
+          item,
+          "Defeito",
+          "Defeito: " +
+            (item.descricaoDefeito || "não informado") +
+            (item.dataDefeito ? " | Data: " + item.dataDefeito : "")
+        );
+
         saveInventory();
         renderTable();
       }
@@ -966,12 +1067,126 @@
         );
         if (!confirmar) return;
 
+        const acao =
+          prompt(
+            "Qual ação corretiva foi tomada? (ex.: troca de tela, ajuste de software, descarte, etc.) (opcional):"
+          ) || "";
+
         item.status = "disponivel";
-        item.descricaoDefeito = "";
-        item.dataDefeito = "";
+        item.acaoCorretiva = acao.trim();
+
+        adicionarHistorico(
+          item,
+          "Liberação de defeito",
+          "Ação corretiva: " +
+            (item.acaoCorretiva || "não informada") +
+            (item.descricaoDefeito
+              ? " | Último defeito conhecido: " + item.descricaoDefeito
+              : "")
+        );
 
         saveInventory();
         renderTable();
+      }
+
+      function mostrarHistorico(codigo) {
+        const item = inventory.find((i) => i.codigo === codigo);
+        if (!item) return;
+
+        if (!Array.isArray(item.historico) || item.historico.length === 0) {
+          alert('Ainda não há histórico para este dispositivo.');
+          return;
+        }
+
+        const linhas = item.historico.map((h, idx) => {
+          const dataHora = h.dataHora || "";
+          const acao = h.acao || "Evento";
+          const detalhes = h.detalhes || "";
+          return (
+            (idx + 1) +
+            ". [" +
+            dataHora +
+            "] " +
+            acao +
+            (detalhes ? " - " + detalhes : "")
+          );
+        });
+
+        alert(
+          'Histórico do dispositivo "' +
+            item.nome +
+            '":\n\n' +
+            linhas.join("\n")
+        );
+      }
+
+      function csvEscape(value) {
+        if (value === null || value === undefined) value = "";
+        value = String(value).replace(/"/g, '""');
+        return '"' + value + '"';
+      }
+
+      function exportarCSV() {
+        if (!inventory.length) {
+          alert("Não há itens para exportar.");
+          return;
+        }
+
+        const header = [
+          "Codigo",
+          "Nome",
+          "Categoria",
+          "NumeroSerie",
+          "Status",
+          "Responsavel",
+          "Matricula",
+          "Area",
+          "ObsEmprestimo",
+          "DataRetirada",
+          "PrevDevolucao",
+          "Local",
+          "ObservacoesEquip",
+          "DescricaoDefeito",
+          "DataDefeito",
+          "AcaoCorretiva"
+        ]
+          .map(csvEscape)
+          .join(";");
+
+        const rows = inventory.map((item) => {
+          return [
+            csvEscape(item.codigo),
+            csvEscape(item.nome),
+            csvEscape(item.categoria),
+            csvEscape(item.numeroSerie),
+            csvEscape(item.status),
+            csvEscape(item.responsavel),
+            csvEscape(item.matriculaColab),
+            csvEscape(item.areaColab),
+            csvEscape(item.obsEmprestimo),
+            csvEscape(item.dataRetirada),
+            csvEscape(item.dataDevolucaoPrevista),
+            csvEscape(item.local),
+            csvEscape(item.observacoes),
+            csvEscape(item.descricaoDefeito),
+            csvEscape(item.dataDefeito),
+            csvEscape(item.acaoCorretiva)
+          ].join(";");
+        });
+
+        const csvContent = header + "\n" + rows.join("\n");
+        const blob = new Blob([csvContent], {
+          type: "text/csv;charset=utf-8;"
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const hoje = new Date().toISOString().slice(0, 10);
+        link.download = "controle_equipamentos_" + hoje + ".csv";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
       }
 
       form.addEventListener("submit", (e) => {
@@ -988,20 +1203,30 @@
           const existente = inventory[index];
           inventory[index] = {
             ...existente,
-            ...baseData,
+            ...baseData
           };
+          adicionarHistorico(
+            inventory[index],
+            "Atualização",
+            "Dados do dispositivo atualizados."
+          );
         } else {
-          inventory.push({
+          const novo = {
             ...baseData,
             status: "disponivel",
             responsavel: "",
             matriculaColab: "",
             areaColab: "",
+            obsEmprestimo: "",
             dataRetirada: "",
             dataDevolucaoPrevista: "",
             descricaoDefeito: "",
             dataDefeito: "",
-          });
+            acaoCorretiva: "",
+            historico: []
+          };
+          adicionarHistorico(novo, "Cadastro", "Dispositivo cadastrado.");
+          inventory.push(novo);
         }
 
         saveInventory();
@@ -1028,6 +1253,10 @@
         });
       });
 
+      exportCsvBtn.addEventListener("click", () => {
+        exportarCSV();
+      });
+
       tbody.addEventListener("click", (e) => {
         const target = e.target;
         if (!(target instanceof HTMLElement)) return;
@@ -1048,6 +1277,10 @@
           marcarDefeito(codigo);
         } else if (target.classList.contains("liberar-defeito")) {
           liberarDefeito(codigo);
+        } else if (target.classList.contains("duplicar")) {
+          duplicarDispositivo(codigo);
+        } else if (target.classList.contains("historico")) {
+          mostrarHistorico(codigo);
         }
       });
 
