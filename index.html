@@ -444,7 +444,7 @@
       </div>
       <div class="header-title">
         <strong>Controle de Equipamentos</strong>
-        <span>Empréstimo por colaborador · Registro simples em HTML</span>
+        <span>Empréstimo por colaborador · Dados em nuvem (Firebase)</span>
       </div>
     </div>
   </header>
@@ -453,7 +453,7 @@
     <h1>
       Dispositivos cadastrados
       <span>Tablets, notebooks, celulares e outros equipamentos</span>
-      <span class="badge">Heineken style · localStorage</span>
+      <span class="badge">Heineken style · Firebase Realtime DB</span>
     </h1>
 
     <!-- Resumo -->
@@ -476,74 +476,42 @@
       </div>
     </div>
 
-    <!-- Formulário de cadastro / edição -->
+    <!-- Formulário -->
     <form id="device-form">
       <div class="grid grid-3">
         <div>
           <label for="codigo">Código do dispositivo *</label>
-          <input
-            type="text"
-            id="codigo"
-            placeholder="Ex.: TAB-001"
-            required
-          />
+          <input type="text" id="codigo" placeholder="Ex.: TAB-001" required />
         </div>
-
         <div>
           <label for="nome">Nome / Descrição *</label>
-          <input
-            type="text"
-            id="nome"
-            placeholder="Ex.: Tablet Samsung A8"
-            required
-          />
+          <input type="text" id="nome" placeholder="Ex.: Tablet Samsung A8" required />
         </div>
-
         <div>
           <label for="categoria">Categoria</label>
-          <input
-            type="text"
-            id="categoria"
-            placeholder="Ex.: Tablet, Notebook, Celular"
-          />
+          <input type="text" id="categoria" placeholder="Ex.: Tablet, Notebook, Celular" />
         </div>
       </div>
 
       <div class="grid grid-2" style="margin-top: 10px;">
         <div>
           <label for="numero-serie">Nº de série / Patrimônio</label>
-          <input
-            type="text"
-            id="numero-serie"
-            placeholder="Ex.: S/N 123456 ou Patrimônio 789"
-          />
+          <input type="text" id="numero-serie" placeholder="Ex.: S/N 123456 ou Patrimônio 789" />
         </div>
-
         <div>
           <label for="local">Local padrão do equipamento</label>
-          <input
-            type="text"
-            id="local"
-            placeholder="Ex.: TI, Almoxarifado, Escritório"
-          />
+          <input type="text" id="local" placeholder="Ex.: TI, Almoxarifado, Escritório" />
         </div>
       </div>
 
       <div style="margin-top: 10px;">
         <label for="observacoes">Observações</label>
-        <textarea
-          id="observacoes"
-          placeholder="Ex.: Com capa, carregador, restrições de uso, etc."
-        ></textarea>
+        <textarea id="observacoes" placeholder="Ex.: Com capa, carregador, restrições de uso, etc."></textarea>
       </div>
 
       <div class="actions">
-        <button type="button" class="btn btn-secondary" id="clear-form">
-          Limpar
-        </button>
-        <button type="submit" class="btn btn-primary">
-          Salvar / Atualizar dispositivo
-        </button>
+        <button type="button" class="btn btn-secondary" id="clear-form">Limpar</button>
+        <button type="submit" class="btn btn-primary">Salvar / Atualizar dispositivo</button>
       </div>
     </form>
 
@@ -556,18 +524,10 @@
       </div>
       <div class="toolbar-right">
         <div class="quick-filters">
-          <button type="button" class="quick-filter-btn quick-filter-btn-active" data-filter="all">
-            Todos
-          </button>
-          <button type="button" class="quick-filter-btn" data-filter="disponivel">
-            Disponíveis
-          </button>
-          <button type="button" class="quick-filter-btn" data-filter="emprestado">
-            Emprestados
-          </button>
-          <button type="button" class="quick-filter-btn" data-filter="defeito">
-            Com defeito
-          </button>
+          <button type="button" class="quick-filter-btn quick-filter-btn-active" data-filter="all">Todos</button>
+          <button type="button" class="quick-filter-btn" data-filter="disponivel">Disponíveis</button>
+          <button type="button" class="quick-filter-btn" data-filter="emprestado">Emprestados</button>
+          <button type="button" class="quick-filter-btn" data-filter="defeito">Com defeito</button>
         </div>
         <div>
           <label for="filter-input" class="muted">Busca livre</label>
@@ -605,21 +565,37 @@
             <th>Ações</th>
           </tr>
         </thead>
-        <tbody id="inventory-body">
-          <!-- linhas geradas via JS -->
-        </tbody>
+        <tbody id="inventory-body"></tbody>
       </table>
     </div>
 
     <div class="footer-note">
-      Dados armazenados localmente no navegador (localStorage). Não precisa de planilha nem servidor.
+      Dados armazenados no Firebase Realtime Database (compartilhado entre usuários).
     </div>
   </div>
 
-  <script>
+  <!-- Firebase + App -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
+
+    // 🔧 SEU CONFIG – já atualizado
+    const firebaseConfig = {
+      apiKey: "AIzaSyBOMQJQcBeATOWzLrrDmtWmFgUsL7XJPUQ",
+      authDomain: "controle-de-equipamentos-c8212.firebaseapp.com",
+      databaseURL: "https://controle-de-equipamentos-c8212-default-rtdb.firebaseio.com",
+      projectId: "controle-de-equipamentos-c8212",
+      storageBucket: "controle-de-equipamentos-c8212.firebasestorage.app",
+      messagingSenderId: "122729781348",
+      appId: "1:122729781348:web:db47e5fb6b71177fe46771",
+      measurementId: "G-KJLFLTSJXM"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
     document.addEventListener("DOMContentLoaded", () => {
-      const STORAGE_KEY = "controleEquipamentosPorPessoa_heineken_defeito";
-      const LEGACY_KEYS = ["controleEquipamentosPorPessoa_heineken"];
+      const LOCAL_STORAGE_KEY = "controleEquipamentosPorPessoa_heineken_defeito";
 
       const form = document.getElementById("device-form");
       const tbody = document.getElementById("inventory-body");
@@ -636,6 +612,7 @@
       let statusFilter = "all";
 
       let inventory = [];
+      let migrationDone = false;
 
       function adicionarHistorico(item, acao, detalhes) {
         if (!Array.isArray(item.historico)) {
@@ -651,70 +628,116 @@
         }
       }
 
-      function normalizeInventory() {
-        inventory = (inventory || []).map((item) => {
-          const historicoNormalizado = Array.isArray(item.historico)
-            ? item.historico.map((h) => ({
-                dataHora: h.dataHora || "",
-                acao: h.acao || "",
-                detalhes: h.detalhes || ""
-              }))
-            : [];
+      function normalizeItem(item) {
+        const historicoNormalizado = Array.isArray(item.historico)
+          ? item.historico.map((h) => ({
+              dataHora: h.dataHora || "",
+              acao: h.acao || "",
+              detalhes: h.detalhes || ""
+            }))
+          : [];
 
-          const defaults = {
-            codigo: "",
-            nome: "",
-            categoria: "",
-            numeroSerie: "",
-            local: "",
-            observacoes: "",
-            status: "disponivel",
-            responsavel: "",
-            matriculaColab: "",
-            areaColab: "",
-            obsEmprestimo: "",
-            dataRetirada: "",
-            dataDevolucaoPrevista: "",
-            descricaoDefeito: "",
-            dataDefeito: "",
-            acaoCorretiva: "",
-            historico: historicoNormalizado
-          };
-          return { ...defaults, ...item, historico: historicoNormalizado };
-        });
+        const defaults = {
+          codigo: "",
+          nome: "",
+          categoria: "",
+          numeroSerie: "",
+          local: "",
+          observacoes: "",
+          status: "disponivel",
+          responsavel: "",
+          matriculaColab: "",
+          areaColab: "",
+          obsEmprestimo: "",
+          dataRetirada: "",
+          dataDevolucaoPrevista: "",
+          descricaoDefeito: "",
+          dataDefeito: "",
+          acaoCorretiva: "",
+          historico: []
+        };
+
+        return {
+          ...defaults,
+          ...item,
+          historico: historicoNormalizado
+        };
       }
 
-      function loadInventory() {
-        let data = localStorage.getItem(STORAGE_KEY);
-        if (data) {
-          try {
-            inventory = JSON.parse(data) || [];
-            normalizeInventory();
-            return;
-          } catch (e) {
-            console.error("Erro ao ler localStorage principal:", e);
-          }
-        }
-
-        for (const legacyKey of LEGACY_KEYS) {
-          const legacyData = localStorage.getItem(legacyKey);
-          if (legacyData) {
-            try {
-              inventory = JSON.parse(legacyData) || [];
-              normalizeInventory();
-              saveInventory();
-              return;
-            } catch (e) {
-              console.error("Erro ao ler localStorage legado:", e);
-            }
-          }
-        }
-
-        inventory = [];
+      function normalizeInventory() {
+        inventory = (inventory || []).map((item) => normalizeItem(item));
       }
 
       function saveInventory() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(inventory));
+        const payload = {};
+        inventory.forEach((item) => {
+          if (!item.codigo) return;
+          const norm = normalizeItem(item);
+          payload[norm.codigo] = norm;
+        });
+        set(ref(db, "equipamentos"), payload).catch((err) => {
+          console.error("Erro ao salvar no Firebase:", err);
+        });
+      }
+
+      function tryMigrateFromLocalStorage() {
+        migrationDone = true;
+        try {
+          const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+          if (!raw) {
+            inventory = [];
+            renderTable();
+            return;
+          }
+          const data = JSON.parse(raw);
+          if (!Array.isArray(data) || !data.length) {
+            inventory = [];
+            renderTable();
+            return;
+          }
+          inventory = data;
+          normalizeInventory();
+          saveInventory();
+        } catch (e) {
+          console.error("Erro ao migrar do localStorage:", e);
+          inventory = [];
+          renderTable();
+        }
+      }
+
+      function loadInventory() {
+        const invRef = ref(db, "equipamentos");
+        onValue(
+          invRef,
+          (snapshot) => {
+            const data = snapshot.val();
+            if (!data) {
+              if (!migrationDone) {
+                tryMigrateFromLocalStorage();
+              } else {
+                inventory = [];
+                renderTable();
+              }
+              return;
+            }
+
+            migrationDone = true;
+            const arr = [];
+            Object.keys(data).forEach((key) => {
+              const item = data[key] || {};
+              if (!item.codigo) {
+                item.codigo = key;
+              }
+              arr.push(item);
+            });
+            inventory = arr;
+            normalizeInventory();
+            renderTable();
+          },
+          (error) => {
+            console.error("Erro ao escutar dados do Firebase:", error);
+          }
+        );
       }
 
       function atualizarResumo() {
@@ -818,7 +841,7 @@
             );
           }
           let tooltipText = tooltipLines.join("\n");
-          tooltipText = tooltipText.replace(/"/g, '&quot;');
+          tooltipText = tooltipText.replace(/"/g, "&quot;");
 
           let actionsHtml = "";
 
@@ -861,27 +884,16 @@
         const codigo = document.getElementById("codigo").value.trim();
         const nome = document.getElementById("nome").value.trim();
         const categoria = document.getElementById("categoria").value.trim();
-        const numeroSerie = document
-          .getElementById("numero-serie")
-          .value.trim();
+        const numeroSerie = document.getElementById("numero-serie").value.trim();
         const local = document.getElementById("local").value.trim();
-        const observacoes = document
-          .getElementById("observacoes")
-          .value.trim();
+        const observacoes = document.getElementById("observacoes").value.trim();
 
         if (!codigo || !nome) {
           alert("Código e Nome são obrigatórios.");
           return null;
         }
 
-        return {
-          codigo,
-          nome,
-          categoria,
-          numeroSerie,
-          local,
-          observacoes
-        };
+        return { codigo, nome, categoria, numeroSerie, local, observacoes };
       }
 
       function clearForm() {
@@ -896,12 +908,9 @@
         document.getElementById("codigo").value = item.codigo;
         document.getElementById("nome").value = item.nome;
         document.getElementById("categoria").value = item.categoria || "";
-        document.getElementById("numero-serie").value =
-          item.numeroSerie || "";
+        document.getElementById("numero-serie").value = item.numeroSerie || "";
         document.getElementById("local").value = item.local || "";
-        document.getElementById("observacoes").value =
-          item.observacoes || "";
-
+        document.getElementById("observacoes").value = item.observacoes || "";
         document.getElementById("codigo").focus();
       }
 
@@ -912,11 +921,9 @@
         document.getElementById("codigo").value = "";
         document.getElementById("nome").value = item.nome || "";
         document.getElementById("categoria").value = item.categoria || "";
-        document.getElementById("numero-serie").value =
-          item.numeroSerie || "";
+        document.getElementById("numero-serie").value = item.numeroSerie || "";
         document.getElementById("local").value = item.local || "";
-        document.getElementById("observacoes").value =
-          item.observacoes || "";
+        document.getElementById("observacoes").value = item.observacoes || "";
         document.getElementById("codigo").focus();
       }
 
@@ -949,16 +956,12 @@
           return;
         }
 
-        const matricula =
-          prompt("Matrícula do colaborador (opcional):") || "";
+        const matricula = prompt("Matrícula do colaborador (opcional):") || "";
         const area =
-          prompt(
-            "Área do colaborador (ex.: Logística, Vendas, TI) (opcional):"
-          ) || "";
+          prompt("Área do colaborador (ex.: Logística, Vendas, TI) (opcional):") || "";
         const dataPrevista =
-          prompt(
-            "Data prevista para devolução (opcional, ex.: 20/12/2025):"
-          ) || "";
+          prompt("Data prevista para devolução (opcional, ex.: 20/12/2025):") ||
+          "";
         const obsEmp =
           prompt(
             "Observação do empréstimo (opcional, ex.: uso no HEILO, sem carregador, etc.):"
@@ -996,7 +999,9 @@
         }
 
         const confirmar = confirm(
-          `Confirmar devolução do dispositivo "${item.nome}" que está com ${item.responsavel || "colaborador"}?`
+          `Confirmar devolução do dispositivo "${item.nome}" que está com ${
+            item.responsavel || "colaborador"
+          }?`
         );
         if (!confirmar) return;
 
@@ -1027,9 +1032,10 @@
         const item = inventory.find((i) => i.codigo === codigo);
         if (!item) return;
 
-        const desc = prompt(
-          `Descreva o defeito do dispositivo "${item.nome}" (ex.: tela quebrada, não liga, sem carregador, etc.):`
-        ) || "";
+        const desc =
+          prompt(
+            `Descreva o defeito do dispositivo "${item.nome}" (ex.: tela quebrada, não liga, sem carregador, etc.):`
+          ) || "";
 
         const dataDefeito =
           prompt(
@@ -1094,7 +1100,7 @@
         if (!item) return;
 
         if (!Array.isArray(item.historico) || item.historico.length === 0) {
-          alert('Ainda não há histórico para este dispositivo.');
+          alert("Ainda não há histórico para este dispositivo.");
           return;
         }
 
@@ -1103,7 +1109,8 @@
           const acao = h.acao || "Evento";
           const detalhes = h.detalhes || "";
           return (
-            (idx + 1) +
+            idx +
+            1 +
             ". [" +
             dataHora +
             "] " +
@@ -1180,8 +1187,8 @@
         });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.href = url;
         const hoje = new Date().toISOString().slice(0, 10);
+        link.href = url;
         link.download = "controle_equipamentos_" + hoje + ".csv";
         document.body.appendChild(link);
         link.click();
@@ -1195,9 +1202,7 @@
         const baseData = getFormData();
         if (!baseData) return;
 
-        const index = inventory.findIndex(
-          (i) => i.codigo === baseData.codigo
-        );
+        const index = inventory.findIndex((i) => i.codigo === baseData.codigo);
 
         if (index >= 0) {
           const existente = inventory[index];
